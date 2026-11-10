@@ -1,12 +1,14 @@
 {
   "name": "dsh-basis-watch",
   "version": "0.1.0",
-  "description": "期现瞭望：商品期货期现基差、跨品种价差与库存的本地化观察台。网络数据只做增量落地，分析与展示全部读本地文件。",
+  "description": "Basis Watch: a local-first dashboard for commodity futures basis, cross-variety spreads and warehouse receipts (China oilseed complex), packaged as a DSH plugin.",
   "type": "module",
   "main": "index.js",
+  "icon": "./icon.svg",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "dsh": {
@@ -18,18 +20,30 @@
         "slots"
       ],
       "platform": "web"
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.1.7-rc.2": "compatible"
+      }
     }
   },
   "files": [
     "index.js",
     "client.js",
     "lib",
+    "locale",
+    "icon.svg",
     "cordis.patch.yml",
     "README.md",
+    "README.zh-CN.md",
     "LICENSE"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "dsh": ">=0.1.7-rc.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": ">=0.1.7-rc.2"
   },
   "license": "MIT",
   "repository": {
@@ -41,12 +55,13 @@
     "url": "https://github.com/codeway3/dsh-basis-watch/issues"
   },
   "scripts": {
-    "check": "node --check index.js && node --check client.js && node --check lib/catalog.js && node --check lib/http.js && node --check lib/sources.js && node --check lib/store.js && node --check lib/calc.js && node --check lib/collect.js && node --check lib/routes.js && node --check lib/tools.js && node --check scripts/collect.mjs && node --check scripts/selftest-data.mjs && node --check scripts/selftest-host.mjs && node --check scripts/selftest-client.mjs && node --check scripts/table-audit.mjs && node --check scripts/render-smoke.cjs && node --check scripts/selftest-correctness.mjs && node --check scripts/selftest-shortcut.mjs",
-    "selftest": "node scripts/selftest-data.mjs && node scripts/selftest-host.mjs && node scripts/selftest-correctness.mjs && node scripts/selftest-client.mjs && node scripts/selftest-shortcut.mjs",
+    "check": "node --check index.js && node --check client.js && node --check lib/catalog.js && node --check lib/http.js && node --check lib/sources.js && node --check lib/store.js && node --check lib/calc.js && node --check lib/collect.js && node --check lib/routes.js && node --check lib/tools.js && node --check scripts/collect.mjs && node --check scripts/selftest-data.mjs && node --check scripts/selftest-host.mjs && node --check scripts/selftest-client.mjs && node --check scripts/table-audit.mjs && node --check scripts/render-smoke.cjs && node --check scripts/selftest-correctness.mjs && node --check scripts/selftest-shortcut.mjs && node --check scripts/check-manifest.mjs",
+    "selftest": "node scripts/selftest-data.mjs && node scripts/selftest-host.mjs && node scripts/selftest-correctness.mjs && node scripts/selftest-client.mjs && node scripts/selftest-shortcut.mjs && node scripts/check-manifest.mjs",
     "selftest:data": "node scripts/selftest-data.mjs",
     "selftest:host": "DSH_BASIS_WATCH_SCHED=0 node scripts/selftest-host.mjs",
     "selftest:render": "node scripts/render-smoke.cjs",
     "audit:tables": "node scripts/table-audit.mjs",
+    "audit:manifest": "node scripts/check-manifest.mjs",
     "collect": "node scripts/collect.mjs",
     "selftest:client": "node scripts/selftest-client.mjs",
     "selftest:shortcut": "node scripts/selftest-shortcut.mjs",

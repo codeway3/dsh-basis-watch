@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Basis Watch",
+    "description": "Local-first dashboard for commodity futures basis, cross-variety spreads and warehouse receipts (China oilseed complex). Fetches incrementally; every statistic is computed from local files."
+  }
+}

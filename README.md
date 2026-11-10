@@ -1,307 +1,116 @@
-# 期现瞭望（dsh-basis-watch）
+# Basis Watch · `dsh-basis-watch`
 
-商品期货的**期现基差、跨品种价差、注册仓单**观察台。DSH 插件，数据全部落本地，
-界面与计算只读本地文件，网络只负责增量追加。
+English | [简体中文](README.zh-CN.md)
 
-第一个板块：**油脂油料**（豆粕 / 豆油 / 棕榈油 / 菜油 / 菜粕 / 豆一 / 豆二 / 葵油）。
+A DSH (DeepSeek Harness) plugin that turns public commodity-market feeds into a
+**local-first dashboard** for **basis (spot − futures)**, **cross-variety spreads** and
+**warehouse receipts**, focused on China's oilseed complex: soybean meal / soybean oil / palm oil /
+rapeseed oil / rapeseed meal / soybean No.1 / soybean No.2 / sunflower oil.
 
-- 运行环境：DSH（DeepSeek Harness）宿主 + Node.js ≥ 22；插件零运行时依赖。
-- 安装：[安装为 DSH 插件](#安装为-dsh-插件)；数据落在 DSH 数据目录，**不进本仓库**。
-- 许可证：[MIT](LICENSE)；使用前请读[免责声明](#免责声明)。
+The network is only used to append data. Every statistic, chart and percentile is computed from
+local files, so the UI keeps working offline and history is never silently rewritten.
 
-## 状态
+- Settings → **期现瞭望 (Basis Watch)** to enable the sidebar entry, or press <kbd>Shift</kbd>+<kbd>Cmd</kbd>+<kbd>D</kbd>.
+- No composite score and no "overvalued / undervalued" label — statistics only, every page states its caliber.
 
-| 阶段 | 内容 | 状态 |
-|---|---|---|
-| P1 | 数据层：行情、日线、分级合约、基差、仓单、新闻、外盘 + 本地存储 + 缺口记录 | ✅ |
-| P2 | 计算层：分位（1/3/5/10 年）、季节性、价差、跨期、波动率、最大回撤 | ✅ |
-| P3 | 总览页（表格 + 价格/基差双轴图 + 资讯） | ✅ |
-| P4 | 品种详情页（9 块：关键数字/价格分位/基差分位/仓单/价格走势/季节/跨期/价差/外盘/完整度/资讯） | ✅ |
-| P5 | 套利页（跨品种价差 + 3 年分位 + z 值 + 走势） | ✅ |
-| P6 | Agent 只读工具 4 个、侧边栏入口开关（默认隐藏）、自测 | ✅ |
-| P7 | 数字口径修复：复权连续、按日期 join、3 年窗口同源、跨进程锁 + 状态机、交易日历、asOf/stale | ✅ |
+## Features
 
-## 数据源（2026-11-07 实测）
+- **Overview** — variety table (price, change, basis rate, 3y percentile, receipts), dual-axis
+  price/basis chart, spread snapshot, latest news, percentile legend
+- **Detail** — key numbers, price percentiles (1/3/5/10y), basis percentiles, receipt curve,
+  candlestick, basis-rate trend, seasonality band, forward curve, related spreads, foreign
+  reference, data completeness, related news
+- **Spreads / Inventory / News** pages; news filtered by tab
+- **Agent tools** (read-only): `oils_overview`, `oils_detail`, `oils_spreads`, `oils_news`
+- Adaptive layout and hand-drawn SVG charts (zero chart dependencies); plugin title/description are
+  localized (en/zh) for the settings list, while the dashboard UI itself is Chinese for now
+- Graceful degradation: missing data shows "no spot source" or "insufficient sample" instead of 0
+  or stale values
 
-| 数据 | 通道 | 历史深度 | 限制 |
-|---|---|---|---|
-| 内盘行情 | 新浪 `hq.sinajs.cn` | 实时 | GB18030 + Referer |
-| 日线（主连 + 分级合约） | 新浪 `getDailyKLine` | **2005 至今** | 分级合约取前 4 个 |
-| 现货/基差 | 生意社现期表 | **2019 至今** | 无 豆二 / 葵油 |
-| 葵油现货 | **Mysteel 免费报价页** | 当日多市场 | 贸易商报价聚合，非交易所基准 |
-| 注册仓单 | 东财 `RPT_FUTU_STOCKDATA` | **仅最近约 67 个交易日** | 本地持续累积 |
-| 新闻 | 中国粮油信息网（6 个品种栏目） | 列表页最新若干条 | 不抓正文 |
-| 外盘参考 | 新浪 `hf_S/hf_SM/hf_BO/hf_FCPO` | 实时 | 仅详情页参考 |
-
-**已排除**：大商所/郑商所官网（412 反爬）、我的农产品网/国家粮油信息中心（不可达）、
-金十快讯（未登录只返回通用流，实测 4 个频道 0 条命中）。
-
-**为什么豆二没有基差**：生意社现期表当日 54 个品名里只有 豆一 / 豆粕 / 豆油 / 菜籽粕 /
-菜籽油OI / 棕榈油，**不含豆二和葵花籽油**。没有现货价就算不出基差，界面显示「无现货源」
-而不是填 0，原因写在悬停提示和术语说明里。
-
-## 数据目录
-
-```
-~/.dsh/dsh-basis-watch/data/          # DSH_HOME 可覆盖父目录
-  daily/<code>.json                   日线（主连 M0 与合约 M2701 都存这里）
-  basis/<YYYY>.jsonl                  基差（按 日期+品名 去重）
-  stock/<code>.jsonl                  注册仓单（按日期去重）
-  news/<YYYY-MM>.jsonl                新闻（按文章 URL 去重）
-  quotes/latest.json                  最新行情快照（含外盘）
-  continuous/<code>.json              复权连续序列（比例复权 + 换月记录 + 覆盖区间）
-  locks/job.lock                      跨进程任务锁（pid + 时间戳，超时/进程死亡可回收）
-  meta.json                           更新时间、缺口、任务状态、datasets 状态机
-```
-
-## 使用
-
-### 独立采集（不依赖 DSH 宿主）
+## Install
 
 ```bash
-node scripts/collect.mjs --status                 # 看本地数据覆盖
-node scripts/collect.mjs --bootstrap --years=2    # 首次回填（约 5–10 分钟）
-node scripts/collect.mjs --bootstrap --years=2 --skip-basis  # 复跑验收：已有完整交易日跳过（约 1 分钟）
-node scripts/collect.mjs --update                 # 盘中：行情（含外盘）+ 新闻
-node scripts/collect.mjs --update --mode=close    # 收盘：日线 + 分级合约 + 仓单 + 基差 + 葵油现货
-node scripts/collect.mjs --basis --date=2026-11-06
-node scripts/collect.mjs --basis --date=2026-11-06 --force  # 源站修订后覆盖该日
-node scripts/collect.mjs --basis --from=2026-07-01 --to=2026-11-06 --force  # 批量修订历史基差
-node scripts/collect.mjs --contracts --years=3       # 回填历史合约日线并重建复权序列
-node scripts/collect.mjs --rebuild-continuous        # 只用已有合约数据重建复权序列
-```
-
-所有会写数据的动作都走跨进程锁，分两把：
-
-- `locks/job.lock`：短任务（盘中行情、基差、新闻、收盘更新）；
-- `locks/backfill.lock`：长任务（首次回填、历史合约回填、复权重建），TTL 2 小时。
-
-分开的原因：回填可能跑十几分钟，如果和盘中更新抢同一把锁，回填期间所有增量更新都会被拒。
-同类任务之间仍然互斥，不会出现两个进程同时写同一个 jsonl。
-
-批量基差修订（`--basis --from --to`、`op=basis&from=&to=`）写的是 basis 数据集，因此用 `job` 锁
-与调度器的基差任务互斥，但 TTL 放宽到 2 小时，避免长批量被当成陈旧锁回收；循环里带 200ms 节流。
-
-### 口径与已知偏差
-
-**这一节比 UI 更重要，先看这里再看数字。**
-
-| 项 | 现在的做法 | 已知偏差 |
-|---|---|---|
-| 连续合约 | 用具体合约日线反推主连跟的合约，按**比例复权**拼接（`lib/continuous.js`） | 比例复权会缩放历史价格水平，**不用于价格分位**（分位用真实报价），只用于收益率类统计 |
-| 复权覆盖 | 从「能匹配到合约」的第一天开始（当前约 2022 年初）；覆盖区间外不平移 | 覆盖区间之外的统计会混入换月跳空，因此统计只取覆盖区间 |
-| 换月次数 | 每天按「收盘价最接近且成交量最大」判定主力合约 | 两个合约价格接近时可能误判，导致个别换月被漏记 |
-| 基差口径 | 生意社现期表的**具体合约**（如 2611）期货价 vs 现货价 | 与主连/复权连续不是同一个价格（实测差 94 元），详情页明确标注对应合约 |
-| 基差 3 年区间 | 与 3 年分位**用同一个 3 年窗口**（727 个样本） | 修复前误用了 19 年全历史（4713 个样本），标签写「3 年」是错的 |
-| 价格分位 | 用**主连真实报价**（未复权），1/3/5/10 年各自取窗口；样本 < 窗口 75% 标「不足」 | 主连换月处有真实跳空，分位会被这些跳空轻微影响（不缩放，但也不平滑） |
-| 回撤 / 波动率 / 季节曲线 | 回撤与波动用**比例复权**序列（只取覆盖区间）；季节曲线是年内相对首日的百分比，常数因子不影响，复权还能去掉年内换月跳空 | 覆盖约 4.8 年，季节分位只有 5 个年点，`bands` 已自动从 p10–p90 降级为 p25–p75 |
-| 交易日历 | `lib/calendar.js` 内置 2024–2026 国务院放假安排；回填日期走 `tradingDaysBetween()`，调度时刻按北京时间 | 2027 及以后未覆盖：仍按周末规则近似，但调度器会告警一次、`/status` 返回 `calendar.covered=false` |
-| 时间 | 日期与交易时段一律按 `Asia/Shanghai` 换算；日期加减走纯字符串（`addDays`/`dateRange`），不再经过 `toISOString()` | 数据源本身按交易所日结算，跨日边界以交易所为准 |
-| 数据时点 | 每个数据集记录 `watermark/lastSuccess/lastError/retryAt`；`asOf` 取**源站时间**、`fetchedAt` 是抓取时刻 | 界面数字不是实时等价物：行情 15 分钟、基差每交易日一次 |
-
-**主连换月的实际影响**（修复前后对比，2022-01 起样本）：
-
-| 品种 | 换月次数 | 最大单日变动（原始 → 复权） | 最大回撤（原始 → 复权） |
-|---|---|---|---|
-| 豆粕 M0 | 12 | 14.08% → 8.42% | −49.8% → −27.5% |
-| 菜粕 RM0 | 16 | 15.72% → 7.37% | −41.8%（复权口径） |
-| 棕榈油 P0 | 18 | 8.18% → 6.58% | −24.2%（复权口径） |
-
-> 结论：不复权时「最大回撤 −49.8%」里很大一部分是换月跳空，不是行情。
-
-### 安装为 DSH 插件
-
-```bash
-# 在仓库根目录执行，$PWD 即本插件目录
-git clone <repo-url> dsh-basis-watch && cd dsh-basis-watch
+git clone https://github.com/codeway3/dsh-basis-watch.git
+cd dsh-basis-watch
 dsh plugin --profile web add link:$PWD
 ```
 
-重启 `dsh web` 后：
+Requires **DSH ≥ 0.1.7-rc.2** and **Node.js ≥ 22**. No runtime dependencies; `react` is provided by
+the host. Restart `dsh web` after installing.
 
-- **设置 → 期现瞭望** 有独立一节：可开关「在侧边栏显示入口」、直接「打开整页」、查看数据完整度、手动抓取
-- 侧边栏入口**默认隐藏**（按需求），在设置里一键开启后即时出现
-- 宿主自动调度：盘中每 15 分钟行情+新闻、非交易时段每 20 分钟新闻、交易日 15:10 日线+分级合约+仓单、16:40 基差+葵油现货
-- 首次启动自动回填 1 年基差
+Data lives outside the repository, under `<DSH_HOME>/dsh-basis-watch/data/`
+(`daily/ basis/ stock/ news/ quotes/ continuous/ meta.json`).
 
-> 为什么开关放在设置页而不是面板里：入口默认隐藏时，面板本身打不开，
-> 把开关放在面板里会形成死循环（进不去 → 打不开 → 永远进不去）。
+## Data sources
 
-### 开发时热更（无需重启 DSH）
+| Data | Source | History | Limits |
+|---|---|---|---|
+| Quotes | Sina `hq.sinajs.cn` | realtime | GB18030 + Referer required |
+| Daily bars (main + contracts) | Sina `getDailyKLine` | 2005 → | 4 nearest contracts |
+| Spot / basis | 100ppi spot-futures table | 2019 → | no soybean No.2 / sunflower oil |
+| Sunflower spot | Mysteel public quotes | same day, multi-market | trader quotes, not an exchange benchmark |
+| Warehouse receipts | Eastmoney `RPT_FUTU_STOCKDATA` | ~67 trading days | accumulated locally over time |
+| News | chinagrain.com (6 columns) | latest list entries | titles only |
+| Foreign reference | Sina `hf_S / hf_SM / hf_BO / hf_FCPO` | realtime | detail page only |
 
-DSH 自带 HMR（`@deepseek-ai/dsh-hmr` + `@deepseek-ai/dsh-client-hmr`），本插件是 `link:` 安装，
-所以可以热更新：
+## Caliber (read before trusting a number)
 
-| 改动 | 生效方式 | 是否需要重启 |
+| Item | How it is computed | Known limitation |
 |---|---|---|
-| `client.js`（界面） | 保存后约 1 秒，宿主 stat-poll 检测到变更并向页面推送 `rebuilt` 帧，已打开的面板自动换新 bundle | **不需要**，也不用刷新页面 |
-| `index.js` / `lib/*`（宿主） | 源码不在默认 watch 范围内（base 的 `root: []`），需要触发一次 profile recomposition：**设置 → 插件** 里关掉再打开「期现瞭望」 | **不需要** |
-| `package.json` / 依赖 / profile bundles 列表 | — | 需要重启 |
+| Continuous contract | main contract inferred from contract bars, **ratio back-adjusted** (`lib/continuous.js`) | rescales historical levels, so it is **not** used for price percentiles |
+| Price percentile / candles | **raw main-contract quotes**, 1/3/5/10y windows; windows with < 75 % of samples marked "insufficient" | real roll gaps remain |
+| Max drawdown / volatility | ratio-adjusted series, restricted to the covered window (≈ 4.8 years) | shorter history than the 10y percentile |
+| Seasonality | percent change from each year's first close; scaling cancels out, adjustment removes in-year roll gaps | only ~5 year points, so the band degrades from p10–p90 to p25–p75 |
+| Basis | 100ppi spot vs the **specific contract** (e.g. 2611), not the continuous series | differs from the main-contract price (≈ 94 CNY in Nov 2026) |
+| Trading calendar | built-in 2024–2026 CN holidays; scheduling uses Asia/Shanghai | 2027+ is approximated by weekdays and flagged via `/status` |
+| Data time | `asOf` = source timestamp, `fetchedAt` = our fetch time | quotes refresh every 15 min, basis once per trading day |
 
-已验证（2026-11-07）：同一进程 PID 内，禁用再启用后宿主新代码立即生效；
-向 `client.js` 追加内容后 `/plugins/events` 收到
-`{"type":"rebuilt","id":"dsh-basis-watch","rev":"b6c0963f943f"}` 与新的 graph 帧。
-
-注意：热更换会丢失面板内的 React 状态；若替换后加载失败（例如语法错误），
-插件会停用直到修好再切换一次，不会自动回滚到旧代码。
-
-### 快捷键
-
-| 键位 | 作用 |
-|---|---|
-| **Shift+Cmd+D**（Windows/Linux：Shift+Ctrl+D） | 切换侧边栏「期现瞭望」入口的显示/隐藏；如果当时正停在本插件内，同时回到进入前的会话 |
-
-- 通过 `ctx.shortcuts.register()` 注册，可在 **设置 → 快捷键** 里改键或恢复默认；
-- 有弹层（设置、术语说明以外）打开时不响应；
-- 快捷键与开关共用同一份配置（`dsh-basis-watch.cfg.v1`），两边状态始终一致。
-- **浏览器 + Linux 不预置默认键**：宿主 `register()` 会对 desktop/web × macos/windows/linux 六个
-  profile 全部校验，而 web+linux 只接受 `Cmd/Ctrl+/`、`+Shift+,`、`+Shift+.` 三种组合。
-  只要有一个默认值非法，整条命令都会被丢弃（表现为「按了完全没反应」），所以该组合留空 = 未绑定，
-  需要的话在设置里自行录制。桌面版 Linux 不受此限，默认仍是 Ctrl+Shift+D。
-- 注册时先试「全平台默认键」，被宿主拒绝后退化为「仅桌面三平台」，保证 macOS/Windows 一定能用；
-  `scripts/selftest-shortcut.mjs` 会用宿主源码里的真实校验规则复核这些默认键。
-
-### HTTP 接口
-
-```
-GET /basis-watch/api?op=status                数据覆盖 + 缺口 + 任务状态
-GET /basis-watch/api?op=overview              板块快照（价格/基差/仓单/走势）
-GET /basis-watch/api?op=detail&code=M0        品种详情（分位/季节/跨期/价差/外盘）
-GET /basis-watch/api?op=spreads               跨品种价差
-GET /basis-watch/api?op=news&limit=60&tag=豆粕
-GET /basis-watch/api?op=update&mode=intraday|close
-GET /basis-watch/api?op=bootstrap&years=2
-```
-
-### Agent 只读工具
-
-| 工具 | 用途 |
-|---|---|
-| `oils_overview` | 板块快照：价格、基差率与分位、仓单 |
-| `oils_detail(code)` | 单品种中长期数据：价格/基差分位、仓单、跨期、季节、价差、外盘、完整度 |
-| `oils_spreads` | 全部价差 + 3 年分位 + z 值 |
-| `oils_news(limit, tag)` | 油脂油料资讯 |
-
-全部只读：不抓取、不写文件、不修改任何配置。
-
-## 页面
-
-```
-期现瞭望        总览 │ 套利 │ 库存 │ 资讯                    设置
-```
-
-### 布局（自适应）
-
-内容区宽度 `max-width:1440px` 居中，窄面板铺满；表格用 `table-layout:fixed` + 每列定宽，
-表头与单元格共用同一套列宽（这是"表头与内容对不齐"的结构性解法，不是靠 padding 凑）。
-
-| 宽度 | 总览表格 | 两栏区 |
-|---|---|---|
-| ≥1120px | 8 列（品种/最新/涨跌/基差率/基差3年分位/仓单/增减/走势） | 左右两栏（1.6 : 1） |
-| 760–1120px | 7 列（隐藏走势） | 单栏 |
-| 600–760px | 6 列（再隐藏增减） | 单栏 |
-| <600px | 5 列（再隐藏仓单） | 单栏 |
-
-图表用 ResizeObserver 按容器真实像素重绘，永不拉伸。
-
-- **总览**：板块表格 + 左侧价格-基差双轴图（可点品种切换）+ 右侧价差快照与最新资讯
-  + 表格下方一行**分位图例**（含义 + 五档配色），右上角「术语说明」打开答疑
-- **术语说明**（右上角按钮，任何页面可达）：解释基差、分位、z 值、仓单、油粕比、季节性、跨期、
-  外盘、数据来源与口径、为什么豆二/葵油没有基差、为什么仓单样本只有几十天
-- **数值与百分比并列**：基差列同时给「元/吨」和「基差率」；价差同时给当前值、单位、3 年分位、
-  z 值、3 年区间（含中位）；详情页给「3 年基差率区间」和「3 年基差区间（元/吨）」两套口径
-- **z 值**：当前值偏离近 3 年均值的标准差倍数，|z| > 2 通常算统计异常，表头悬停有说明
-- **分位配色**：蓝（很低 0–20%）→ 青（偏低 20–40%）→ 灰（居中 40–60%）
-  → 橙（偏高 60–80%）→ 红（很高 80–100%），条内为同一渐变按值裁剪，百分比文字随阶段变色
-- **数据缺失不伪造**：无现货源的品种显示「无现货源」并在悬停说明原因，
-  样本不足显示「样本不足」，不用 0 或旧值顶替
-- **品种详情**（点表格任意行）：关键数字、价格分位（1/3/5/10 年）、基差分位（1/3/5 年）、
-  注册仓单曲线、**K 线**、基差率走势、季节性分位带（含当年线）、跨期结构、相关价差、
-  外盘参考、数据完整度、相关资讯
-- **套利**：油粕比 / 豆棕价差 / 菜豆油价差 / 豆菜粕价差（葵油上市后自动出现葵豆油、葵菜油价差）
-- **库存**：注册仓单表（数量、日增减、样本天数）
-- **资讯**：粮油网资讯流，按栏目标签
-
-### 图表实现
-
-图表为**手绘 SVG**（零依赖、无构建步骤），支持：双 Y 轴、1/2/5 刻度、网格、
-面积渐变、十字线 + 读数气泡、K 线（红涨绿跌）、季节性分位带（7 日平滑）。
-
-**为什么不用现成库**（2026-11 实测）：
-
-| 库 | 体积 | 结论 |
-|---|---|---|
-| uPlot | 532KB 解包（min ≈48KB） | 最合适的候选：MIT、canvas、性能好，但需内联进单文件 bundle 且是命令式 API |
-| lightweight-charts | 3MB 解包 | 金融专业但太重 |
-| echarts | 58MB 解包 | 不可接受 |
-| chart.js | 6MB 解包 | 偏重 |
-
-插件是单文件加载、没有打包步骤，引入这些库要么内联几十万字符，要么加构建链。
-当前数据规模（180 点/图）手绘 SVG 足够，且能精确控制样式。
-
-> 早期版本的图用 `preserveAspectRatio="none"` + 固定 viewBox，等于把坐标系横向拉伸，
-> 且没有坐标轴与刻度 —— 这是"图很丑"的根因，已重写为按真实像素宽度绘制。
-
-## 设计取舍
-
-- **本地优先**：分位与图表全部基于本地文件，断网可看；网络失败只记缺口。
-- **缺口可见**：`meta.gaps` 记录失败原因，页面「数据完整度」展示，不静默跳过。
-- **分位口径**：秩线性归一（最小值 0%、最大值 100%，并列值取中点），样本不足返回 `NaN` 并在页面显示"样本不足"。
-- **仓单只有 67 天**：东财接口上限，页面上标注样本量，不拿 3 个月假装 3 年。
-- **葵油预置**：2026-11-12 上市（郑商所 SO，首批 SO2705/SO2707/SO2709/SO2711），
-  目录标记 `upcoming`，到上市日自动转为可抓取；现货走 Mysteel 多地均价（页面标注来源），
-  避免第一天的数据永久缺失。
-- **不做综合评分**：只给各因子分位，不给"高估/低估"结论，避免伪精确。
-
-## 自测
+## CLI (works without the DSH host)
 
 ```bash
-npm run check                                    # 语法检查
-node scripts/selftest-data.mjs                   # 86 项：解析器 / 存储 / 计算层 / 时段
-node scripts/selftest-host.mjs                   # 26 项：路由 / 只读工具 / 清理
-node scripts/selftest-correctness.mjs            # 97 项：时区 / 节假日 / 日期链路 / 并发锁 / 失败注入 / 采集失败契约 / 修订更新 / 3 年窗口 / 复权 / 口径分层 / 季节带降级 / 回填跳过 / extraSpot / 抢锁状态 / 缺口清理
-FR_REACT_DIR=/path/to/node_modules node scripts/selftest-client.mjs  # 12 项：快捷键注册与入口切换
-node scripts/selftest-shortcut.mjs                # 5 项：默认键位用宿主真实规则校验（web+Linux 白名单 / modals / regions）
-FR_REACT_DIR=/path/to/node_modules node scripts/render-smoke.cjs   # 11 项：页面 + 图表 + 术语弹层 + 分位条 + 季节图（含降级）
-FR_REACT_DIR=/path/to/node_modules node scripts/table-audit.mjs    # 表格结构：表头列数 == 每行单元格数
+node scripts/collect.mjs --status                     # coverage snapshot
+node scripts/collect.mjs --bootstrap --years=2        # first fill (~5–10 min)
+node scripts/collect.mjs --update                     # intraday quotes + news
+node scripts/collect.mjs --update --mode=close        # after close: bars, receipts, basis
+node scripts/collect.mjs --basis --date=2026-11-06 --force
+node scripts/collect.mjs --contracts --years=3        # backfill contract bars, rebuild adjustment
+node scripts/collect.mjs --rebuild-continuous
 ```
 
-`FR_REACT_DIR` 需要指向包含 `react` / `react-dom` 的 node_modules（插件包本身不带依赖）。
+Every write goes through a cross-process lock (`job` for incremental work, `backfill` for long
+backfills) and a per-dataset state machine, so the scheduler, HTTP API and CLI can run side by side.
 
-`FR_REACT_DIR` 需要指向包含 `react` / `react-dom` 的 node_modules（插件包本身不带依赖）。
-
-## 目录结构
+## HTTP API
 
 ```
-dsh-basis-watch/
-├── index.js               宿主半：调度器 + 路由/工具挂载
-├── client.js              浏览器半：React 面板（单文件，无构建）
-├── cordis.patch.yml       DSH bundle patch（把插件插进 profile 名册）
-├── lib/
-│   ├── catalog.js         品种/合约目录（含葵油预留）
-│   ├── sources.js         数据源抓取与解析（新浪 / 生意社 / 东财 / 粮油网 / Mysteel）
-│   ├── http.js            带超时与重试的 fetch
-│   ├── store.js           本地存储（日线/基差/仓单/新闻/复权/meta）
-│   ├── calc.js            分位、价差、季节性、回撤/波动
-│   ├── continuous.js      比例复权拼接
-│   ├── calendar.js        交易日历（2024–2026 节假日）
-│   ├── lock.js            跨进程锁
-│   ├── jobs.js            任务锁 + 数据集状态机 + 失败契约
-│   ├── collect.js         采集编排（盘中 / 收盘 / 回填 / 批量修订）
-│   ├── routes.js          /basis-watch/api
-│   └── tools.js           Agent 只读工具 4 个
-└── scripts/               采集 CLI 与自测（7 套，共 200+ 断言）
+GET /basis-watch/api?op=status | overview | detail&code=M0 | spreads | news&limit=60&tag=豆粕
+GET /basis-watch/api?op=update&mode=intraday|close | bootstrap&years=2 | basis&date=...&force=1
 ```
 
-## 免责声明
+## Development
 
-- 本项目是**数据观察工具**，不构成投资建议，不提供交易信号或收益承诺。
-- 行情、现货、仓单、资讯均来自第三方公开接口（新浪财经、生意社、东方财富、中国粮油信息网、
-  Mysteel 等）。这些接口可能变更、限流或停止服务，作者不对其可用性、及时性与准确性作保证。
-- 抓取频率已刻意压低（盘中 15 分钟、基差每交易日一次、回填 200ms/次节流），请勿自行提高频率；
-  二次分发或商用前请自行确认各数据源的服务条款。
-- 期货交易风险极高，据此操作风险自担。
+```bash
+npm run check        # syntax check
+npm run selftest     # data / host / correctness / client / shortcut / manifest
+FR_REACT_DIR=/path/to/node_modules node scripts/render-smoke.cjs   # SSR smoke (11 checks)
+FR_REACT_DIR=/path/to/node_modules node scripts/table-audit.mjs    # table header/body alignment
+```
 
-## 许可
+`FR_REACT_DIR` must point at a `node_modules` containing `react` and `react-dom`; the plugin itself
+carries no dependencies.
 
-[MIT](LICENSE)。引用或二次开发请保留版权声明。
+- `client.js` hot-reloads in the running DSH app.
+- `index.js` / `lib/*` need a profile recomposition (toggle the plugin off/on in Settings → Plugins).
+
+## Disclaimer
+
+Not investment advice. Market, spot, receipt and news data come from third-party public endpoints
+(Sina Finance, 100ppi, Eastmoney, chinagrain.com, Mysteel). They may change, rate-limit or shut
+down; availability, timeliness and accuracy are not guaranteed. Fetch intervals are deliberately
+low (15 min intraday, one basis pass per trading day, 200 ms throttle on backfills) — please do not
+raise them, and check each source's terms before redistributing. Futures trading carries
+substantial risk.
+
+## License
+
+[MIT](LICENSE) © dsh-basis-watch contributors
