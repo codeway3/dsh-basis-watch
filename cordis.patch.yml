@@ -1,0 +1,6 @@
+# dsh-basis-watch bundle patch: 把插件插入 profile 名册。
+# 安装：dsh plugin --profile web add link:<path-to-this-package>
+# 重启 dsh web 后生效（宿主半跑在 dsh 进程里，浏览器半由 dsh.client 声明加载）。
+- insert:
+    - id: dsh-basis-watch
+      name: dsh-basis-watch

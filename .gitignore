@@ -1,0 +1,26 @@
+# 依赖与构建产物
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+
+# 运行时数据（默认落在 DSH 数据目录，防止有人把 DSH_HOME 指到仓库里）
+data/
+*.jsonl
+quotes/
+continuous/
+locks/
+meta.json
+
+# 测试与调试产物
+tmp/
+.dsh-artifacts/
+*.log
+coverage/
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
