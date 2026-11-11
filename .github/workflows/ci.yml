@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # 渲染类自测需要 react（devDependencies，不随插件发布）
+      - name: Install dev dependencies
+        run: npm install --no-package-lock
+      - name: Syntax check
+        run: npm run check
+      - name: Data shape tests
+        run: node scripts/selftest-data.mjs
+      - name: Host tests
+        run: DSH_BASIS_WATCH_SCHED=0 node scripts/selftest-host.mjs
+      - name: Correctness tests
+        run: node scripts/selftest-correctness.mjs
+      - name: Client tests
+        run: FR_REACT_DIR="$PWD/node_modules" node scripts/selftest-client.mjs
+      - name: Shortcut tests
+        run: node scripts/selftest-shortcut.mjs
+      - name: Manifest checks
+        run: node scripts/check-manifest.mjs
+      - name: SSR render smoke
+        run: FR_REACT_DIR="$PWD/node_modules" node scripts/render-smoke.cjs
+      - name: Table alignment audit
+        run: FR_REACT_DIR="$PWD/node_modules" node scripts/table-audit.mjs

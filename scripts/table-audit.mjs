@@ -85,11 +85,48 @@ const detail = {
   gaps: [],
 }
 
+const termRows = [{
+  code: 'M0',
+  name: '豆粕',
+  exchange: 'DCE',
+  asOf: '2026-11-09',
+  selection: { by: 'openInterest', top: 4, candidates: 27, alive: 3 },
+  contracts: [
+    { code: 'M2701', month: '27/01', close: 3075, volume: 907882, openInterest: 1917119, date: '2026-11-09' },
+    { code: 'M2703', month: '27/03', close: 3039, volume: 93127, openInterest: 514166, date: '2026-11-09' },
+  ],
+  pairs: [
+    { near: 'M2701', far: 'M2703', monthGap: 2, days: 61, nearClose: 3075, farClose: 3039, spread: 36, spreadRate: 1.17, annualized: 7.0, percentile: { value: 3.8, sample: 160, min: -9, max: 2, median: -1.2, from: '2026-03-01' }, volume: { near: 907882, far: 93127 }, openInterest: { near: 1917119, far: 514166 }, liquidity: 'thin' },
+  ],
+}]
+
 const CASES = [
   ['总览', plugin.__components.Overview, { onOpen: () => {}, preview: { ...overview, spreadsPreview: { ok: true, spreads } } }],
+  // 中金所：列数比油料少两列（无仓单），单独核对
+  ['中金所总览', plugin.__components.Overview, {
+    board: 'cffex',
+    onOpen: () => {},
+    preview: {
+      ok: true,
+      quoteAt: '2026-11-11T11:05:00+08:00',
+      boards: [],
+      rows: [
+        {
+          code: 'IF0', name: '沪深300', exchange: 'CFFEX', board: 'cffex', kind: 'stock', status: 'active',
+          price: 4015, changePct: -0.36,
+          basis: { date: '2026-11-11', spot: 4047.21, future: 4015, basis: -32.21, basisRate: -0.796, mode: 'future-index' },
+          basisPercentile: 25.7, stock: null, spark: [1, 2, 3],
+        },
+        {
+          code: 'T0', name: '10年期国债', exchange: 'CFFEX', board: 'cffex', kind: 'bond', status: 'active',
+          price: 110.14, changePct: -0.02, basis: null, basisPercentile: null, stock: null, spark: [1, 2, 3],
+        },
+      ],
+    },
+  }],
   ['品种详情', plugin.__components.Detail, { code: 'M0', onBack: () => {}, preview: detail }],
-  ['库存', plugin.__components.StockTab, { onOpen: () => {}, preview: overview }],
   ['套利', plugin.__components.Spreads, { preview: { ok: true, spreads } }],
+  ['跨期', plugin.__components.TermPanel, { rows: termRows, code: 'M0', onSelect: () => {} }],
 ]
 
 let tablesChecked = 0

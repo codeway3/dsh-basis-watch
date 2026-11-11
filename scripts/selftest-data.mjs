@@ -23,7 +23,7 @@ import {
   dateRange,
 } from '../lib/sources.js'
 import { createStore } from '../lib/store.js'
-import { buildOverview } from '../lib/routes.js'
+import { buildDetail, buildOverview } from '../lib/routes.js'
 import {
   basisSeries,
   basisStats,
@@ -56,7 +56,8 @@ const check = (label, cond, detail = '') => {
 
 /* ── 1. 品种目录 ── */
 console.log('\n  品种目录')
-check('目录 8 个品种', CATALOG.length === 8, `n=${CATALOG.length}`)
+check('目录 76 个品种（含氢氧化锂预留位）', CATALOG.length === 76, `n=${CATALOG.length}`)
+check('板块划分正确', ['oil', 'black', 'chem', 'nonferrous', 'precious', 'energy', 'agri', 'newenergy', 'other', 'cffex'].map((b) => CATALOG.filter((v) => (v.board ?? 'oil') === b).length).join(',') === '8,7,21,9,4,4,10,4,1,8', ['oil', 'black', 'chem', 'nonferrous', 'precious', 'energy', 'agri', 'newenergy', 'other', 'cffex'].map((b) => CATALOG.filter((v) => (v.board ?? 'oil') === b).length).join(','))
 const before = resolveCatalog(new Date('2026-11-11T12:00:00+08:00'))
 const after = resolveCatalog(new Date('2026-11-12T12:00:00+08:00'))
 check('葵油上市前是 upcoming', before.find((v) => v.code === 'SO0')?.effectiveStatus === 'upcoming')
@@ -138,7 +139,8 @@ check('粮油网标签正确', news[0].tags[0] === '豆粕')
 check('板块关键词命中', newsRelevant(news[0].title) === true && newsRelevant('螺纹钢库存') === false)
 
 check('现期表品名映射到品种', varietyOfSpotName('菜籽油OI')?.code === 'OI0' && varietyOfSpotName('豆粕')?.code === 'M0')
-check('未知品名映射为 null', varietyOfSpotName('螺纹钢') === null)
+check('黑色/能化品名映射', varietyOfSpotName('螺纹钢')?.code === 'RB0' && varietyOfSpotName('甲醇MA')?.code === 'MA0' && varietyOfSpotName('聚氯乙烯')?.code === 'V0', JSON.stringify([varietyOfSpotName('螺纹钢'), varietyOfSpotName('甲醇MA'), varietyOfSpotName('聚氯乙烯')]))
+check('未知品名映射为 null', varietyOfSpotName('不存在的商品') === null)
 
 /* ── 3. 时段判断 ── */
 console.log('\n  时段判断')
@@ -188,7 +190,7 @@ store.appendNews([{ id: '1', time: '2026-11-06 20:00:00', title: 'USDA', content
 store.appendNews([{ id: '1', time: '2026-11-06 20:00:00', title: 'USDA', content: 'x' }])
 check('新闻按 id 去重', store.readNews().length === 1)
 
-store.writeQuotes([{ code: 'M0', name: '豆粕', last: 3080, prevSettle: 3101, hold: 1890657, at: '2026-11-06T23:00:00+08:00' }])
+store.writeQuotes([{ code: 'M0', name: '豆粕', last: 3080, prevSettle: 3101, hold: 1890657, at: '2026-11-06T23:00:00+08:00' }], [{ name: '美国大豆', symbol: 'ZS', last: 1180, changePct: 0.5 }])
 check('行情快照读写', store.readQuotes()?.rows?.[0]?.last === 3080)
 
 store.recordGap('basis', '2026-10-01', '节假日')
@@ -199,7 +201,14 @@ check('缺口可清除', store.meta().gaps.every((g) => g.key !== '2026-10-01'))
 /* ── 5. 快照组装 ── */
 console.log('\n  快照组装')
 const overview = buildOverview(store, new Date('2026-11-12T10:00:00+08:00'))
-check('快照含全部品种', overview.rows.length === 8, `n=${overview.rows.length}`)
+// 外盘参考：buildDetail 必须用 resolveCatalog 补过的 board，否则油料详情永远为空
+const detailM0 = buildDetail(store, 'M0')
+check('详情外盘按板块透传', Array.isArray(detailM0.foreign) && detailM0.foreign.length === 1 && detailM0.foreign[0].name === '美国大豆', JSON.stringify(detailM0.foreign))
+const detailCU = buildDetail(store, 'CU0')
+check('非油料详情不带外盘', Array.isArray(detailCU.foreign) && detailCU.foreign.length === 0)
+check('快照含全部品种', overview.rows.length === 76, `n=${overview.rows.length}`)
+check('中金所行带 board/kind', overview.rows.filter((r) => r.board === 'cffex' && r.kind === 'stock').length === 4)
+check('黑色/能化/有色行带 board', overview.rows.filter((r) => r.board === 'black').length === 7 && overview.rows.filter((r) => r.board === 'chem').length === 21 && overview.rows.filter((r) => r.board === 'nonferrous').length === 9)
 const mp = overview.rows.find((r) => r.code === 'M0')
 check('快照带价格', mp.price === 3080)
 check('快照带涨跌幅', Math.abs(mp.changePct - ((3080 - 3101) / 3101) * 100) < 1e-9, mp.changePct?.toFixed(2))

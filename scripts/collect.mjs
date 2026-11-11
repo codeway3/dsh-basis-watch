@@ -22,7 +22,9 @@ import {
   localDate,
   rebuildContinuous,
   updateContractHistory,
+  backfillEnergyBasis,
   updateAfterClose,
+  updateEnergyRef,
   updateBasis,
   updateIntraday,
 } from '../lib/collect.js'
@@ -35,6 +37,12 @@ const val = (name, fallback) => {
 }
 
 const log = (msg) => console.log(`[basis-watch] ${msg}`)
+
+/** 任务没跑成：打印原因并让退出码非 0，脚本化调用才不会被当成成功。 */
+const notDone = (out) => {
+  log(`未执行：${out.reason ?? out.error}`)
+  process.exitCode = 1
+}
 
 const main = async () => {
   const store = createStore()
@@ -58,7 +66,7 @@ const main = async () => {
       { ttlMs: 2 * 3600 * 1000, lockName: 'backfill' },
     )
     if (!out.ok) {
-      log(`未执行：${out.reason ?? out.error}`)
+      notDone(out)
       return
     }
     const summary = out.result
@@ -71,10 +79,32 @@ const main = async () => {
     return
   }
 
+  if (has('--energy-basis')) {
+    const years = Number(val('years', '3'))
+    const ref = await updateEnergyRef(store)
+    const out = backfillEnergyBasis(store, Number.isFinite(years) && years > 0 ? years : 3)
+    log(`能源参考：Brent ${ref.brent} 根 / 汇率 ${ref.fx} 天；回填基差 ${out.rows} 行（${out.from ?? '—'} ~ ${out.to ?? '—'}）`)
+    return
+  }
+
   if (has('--basis')) {
     const force = has('--force')
     const from = val('from', null)
     const to = val('to', null)
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+    if (from !== null || to !== null) {
+      if (from === null || to === null || !DATE_RE.test(from) || !DATE_RE.test(to)) {
+        log(`日期格式应为 YYYY-MM-DD：${from ?? '?'} ~ ${to ?? '?'}`)
+        process.exitCode = 1
+        return
+      }
+      const span = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000)
+      if (!Number.isFinite(span) || span < 0 || span > 1200) {
+        log(`区间不合法或过大（${span} 天），一次最多 1200 天`)
+        process.exitCode = 1
+        return
+      }
+    }
     if (from !== null && to !== null) {
       // 批量修订：按交易日逐日重抓（源站事后修订历史数据时用）
       const { tradingDaysBetween } = await import('../lib/calendar.js')
@@ -108,16 +138,21 @@ const main = async () => {
         { ttlMs: 2 * 3600 * 1000 },
       )
       if (!out.ok) {
-        log(`未执行：${out.reason ?? out.error}`)
+        notDone(out)
         return
       }
       log(`完成：${out.result.dates} 天，抓到 ${out.result.rows} 行，匹配 ${out.result.matched} 行，覆盖旧值 ${out.result.replaced} 行`)
       return
     }
     const date = val('date', localDate())
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      log(`日期格式应为 YYYY-MM-DD：${date}`)
+      process.exitCode = 1
+      return
+    }
     const out = await runJob(store, 'basis', () => updateBasis(store, date, { force }), { watermarkOf: () => date })
     if (!out.ok) {
-      log(`未执行：${out.reason ?? out.error}`)
+      notDone(out)
       return
     }
     const res = out.result
@@ -144,7 +179,7 @@ const main = async () => {
       { ttlMs: 2 * 3600 * 1000, lockName: 'backfill' },
     )
     if (!out.ok) {
-      log(`未执行：${out.reason ?? out.error}`)
+      notDone(out)
       return
     }
     const res = out.result
@@ -160,7 +195,7 @@ const main = async () => {
       lockName: 'backfill',
     })
     if (!out.ok) {
-      log(`未执行：${out.reason ?? out.error}`)
+      notDone(out)
       return
     }
     log(`复权重建：${JSON.stringify(out.result.built)}`)
@@ -169,17 +204,21 @@ const main = async () => {
 
   if (has('--update')) {
     const mode = val('mode', 'intraday')
+    // 收盘模式在 16:40 前不抓基差：当天现期表还没发布，抓了只会把任务判成 partial
+    const { shanghaiMinutes } = await import('../lib/calendar.js')
+    const withBasis = mode === 'close' ? shanghaiMinutes(new Date()) >= 16 * 60 + 40 : false
     const out = await runJob(
       store,
       mode === 'close' ? 'update-close' : 'update-intraday',
-      async () => (mode === 'close' ? await updateAfterClose(store) : await updateIntraday(store)),
+      async () => (mode === 'close' ? await updateAfterClose(store, new Date(), {}, { withBasis }) : await updateIntraday(store)),
       // 盘中任务的 watermark 是时刻（一天内可多次跑）；收盘任务是日期（一天一次）
       { watermarkOf: () => (mode === 'close' ? localDate() : new Date().toISOString()) },
     )
     if (!out.ok) {
-      log(`未执行：${out.reason ?? out.error}`)
+      notDone(out)
       return
     }
+    if (mode === 'close' && !withBasis) log('基差未抓（16:40 前），稍后由 --basis 或调度器补上')
     log(`更新完成（${mode}）：${JSON.stringify(out.result)}`)
     return
   }
@@ -193,6 +232,7 @@ const main = async () => {
     --update [--mode=close]  增量更新（默认 intraday）
     --basis [--date=YYYY-MM-DD] [--force]  单独抓某天基差（force=同日修订）
     --contracts [--years=3]   回填历史合约日线并重建复权序列
+    --energy-basis [--years=3] 更新 Brent/汇率并回填能源内外价差
     --rebuild-continuous      仅用已有合约数据重建复权序列`)
 }
 

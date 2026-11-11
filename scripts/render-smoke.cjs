@@ -91,6 +91,71 @@ const detail = {
   gaps: [],
 }
 
+/* 中金所样本：股指算贴水（期货 − 指数），国债没有基差 */
+const idxSeries = closes.map((c, i) => ({ date: `2026-01-${String((i % 28) + 1).padStart(2, '0')}`, close: c + 20 }))
+const overviewCffex = {
+  ok: true,
+  quoteAt: '2026-11-11T11:05:00+08:00',
+  boards: [
+    { id: 'oil', name: '油脂油料', short: '油脂油料', note: '商品 · 现货基差' },
+    { id: 'cffex', name: '中金所', short: '中金所', note: '金融 · 期指升贴水 / 国债期限结构' },
+  ],
+  rows: [
+    {
+      code: 'IF0', name: '沪深300', exchange: 'CFFEX', board: 'cffex', kind: 'stock', status: 'active',
+      price: 4015, changePct: -0.36,
+      basis: { date: '2026-11-11', spot: 4047.21, future: 4015, basis: -32.21, basisRate: -0.796, mode: 'future-index' },
+      basisPercentile: 25.7, stock: null,
+      spark: closes.slice(-30),
+      priceSeries: closes.map((c, i) => ({ date: `2026-01-${String((i % 28) + 1).padStart(2, '0')}`, close: c })),
+      basisSeries: basisRates.map((b, i) => ({ date: `2026-01-${String((i % 28) + 1).padStart(2, '0')}`, basisRate: b, contract: null })),
+    },
+    {
+      code: 'T0', name: '10年期国债', exchange: 'CFFEX', board: 'cffex', kind: 'bond', status: 'active',
+      price: 110.14, changePct: -0.02, basis: null, basisPercentile: null, stock: null,
+      spark: closes.slice(-30),
+      priceSeries: closes.map((c, i) => ({ date: `2026-01-${String((i % 28) + 1).padStart(2, '0')}`, close: c / 30 })),
+      basisSeries: [],
+    },
+  ],
+}
+
+const detailCffex = {
+  ok: true,
+  variety: { code: 'IF0', name: '沪深300', exchange: 'CFFEX', board: 'cffex', kind: 'stock', indexCode: 'sh000300', effectiveStatus: 'active' },
+  quote: { hold: 173620 },
+  indexQuote: { symbol: 'sh000300', name: '沪深300', last: 4047.21 },
+  foreign: [],
+  price: {
+    last: 4015, date: '2026-11-10',
+    spark: closes, dates: closes.map((_, i) => `2026-01-${String((i % 28) + 1).padStart(2, '0')}`),
+    stats: { sample: 2380, from: '2017-01-17', to: '2026-11-10', last: 4015, maxDrawdown: -30, vol20: 12, vol60: 14, windows: {} },
+    bars: closes.map((c, i) => ({ d: `2026-10-${String((i % 28) + 1).padStart(2, '0')}`, o: c - 5, h: c + 12, l: c - 14, c })),
+    percentile: {},
+    caliber: { stats: 'adjusted', percentile: 'raw', chart: 'raw', coverage: '2022-01-18' },
+  },
+  continuous: { method: 'ratio-backadjust', from: '2022-01-18', to: '2026-11-10', rolls: 3 },
+  season: { days: Array.from({ length: 300 }, (_, i) => ({ day: i + 1, p10: -8, p25: -4, p50: 0, p75: 4, p90: 8, sample: 10 })), current: [{ day: 1, value: 0 }, { day: 300, value: 3 }], years: 10, bands: 'p10-p90' },
+  seasonWin: [],
+  basis: {
+    sample: 2380, from: '2017-01-17', current: -0.796, basis: -32.21,
+    p1y: { percentile: 20, sample: 240 }, p3y: { percentile: 25.7, sample: 700, min: -1.9, max: -0.2, median: -0.9 }, p5y: { percentile: 30, sample: 1200 },
+    mode: 'future-index', mainContract: 'IF2612', expiry: '2026-12-18', daysToExpiry: 37, annualized: -7.85,
+    spot: 4047.21, future: 4015,
+  },
+  basisSeries: basisRates.map((v, i) => ({ date: `2026-01-${String((i % 28) + 1).padStart(2, '0')}`, basisRate: v })),
+  stock: null,
+  contracts: [
+    { code: 'IF2611', month: '26/11', close: 4025, date: '2026-11-10', hold: 44337, bars: 31 },
+    { code: 'IF2612', month: '26/12', close: 4015, date: '2026-11-10', hold: 173620, bars: 137 },
+  ],
+  contractsAsOf: '2026-11-10',
+  spreads: [{ id: 'if_ih', label: 'IF ÷ IH', type: 'ratio', available: true, current: 1.4629, percentile3y: 55, z3y: 0.1, min3y: 1.3, max3y: 1.7 }],
+  news: [],
+  gaps: [],
+  extraSpot: { ok: true, error: null, date: null },
+}
+
 global.fetch = async (url) => {
   const u = String(url)
   let body = { ok: true, rows: [], spreads: [], catalog: [], coverage: {} }
@@ -141,8 +206,53 @@ if (page === undefined) {
 const CONFIGS = [
   { label: '总览', component: plugin.__components.Overview, props: { onOpen: () => {}, preview: { ...overview, spreadsPreview: { ok: true, spreads: detail.spreads } } } },
   { label: '品种详情', component: plugin.__components.Detail, props: { code: 'M0', onBack: () => {}, preview: detail } },
+  // 详情页必须保留顶部页签，否则换页要绕「返回总览」
+  { label: '详情页（带导航）', component: plugin.__components.Page, props: { initialDetail: 'M0' } },
   { label: '套利', component: plugin.__components.Spreads, props: { preview: { ok: true, spreads: detail.spreads } } },
-  { label: '库存', component: plugin.__components.StockTab, props: { onOpen: () => {}, preview: overview } },
+  {
+    label: '跨期价差',
+    component: plugin.__components.Spreads,
+    props: {
+      initialMode: 'term',
+      preview: {
+        ok: true,
+        rows: [{
+          code: 'M0',
+          name: '豆粕',
+          asOf: '2026-11-09',
+          selection: { by: 'openInterest', top: 4, candidates: 27, alive: 3 },
+          contracts: [],
+          pairs: [
+            { near: 'M2701', far: 'M2703', monthGap: 2, days: 61, nearClose: 3075, farClose: 3039, spread: 36, spreadRate: 1.17, annualized: 7, percentile: { value: 3.8, sample: 160, min: -9, max: 2, median: -1.2 }, volume: { near: 907882, far: 93127 }, openInterest: { near: 1917119, far: 514166 }, liquidity: 'ok' },
+          ],
+        }],
+      },
+    },
+  },
+  // 中金所板块：贴水口径、无仓单列、详情页无仓单卡片
+  // 资讯页签的小字必须跟板块走（历史 bug：切换板块后仍是粮油网）
+  { label: '资讯页签（黑色）', component: plugin.__components.Page, props: { initialBoard: 'black', initialTab: 'news' } },
+  { label: '资讯页签（其他）', component: plugin.__components.Page, props: { initialBoard: 'other', initialTab: 'news' } },
+  { label: '中金所总览', component: plugin.__components.Overview, props: { board: 'cffex', onOpen: () => {}, preview: overviewCffex } },
+  { label: '中金所详情', component: plugin.__components.Detail, props: { code: 'IF0', board: 'cffex', onBack: () => {}, preview: detailCffex } },
+  { label: '中金所骨架', component: plugin.__components.Page, props: { initialBoard: 'cffex' } },
+  { label: '黑色骨架', component: plugin.__components.Page, props: { initialBoard: 'black' } },
+  // 中金所资讯：交易所公告 + 快讯，标签应显示「公告」而不是板块名
+  {
+    label: '中金所资讯',
+    component: plugin.__components.NewsList,
+    props: {
+      limit: 10,
+      board: 'cffex',
+      preview: {
+        ok: true,
+        rows: [
+          { id: 'cffex-48740', time: '2026-10-28T09:00:00+08:00', title: '关于增加30年期国债期货合约可交割国债的通知', url: 'https://www.cffex.com.cn/cn/jystz/20261028/48740.html', tags: ['中金所', '公告'] },
+          { id: 'jin10-x', time: '2026-11-11T11:27:56+08:00', title: '期货热点追踪', url: 'https://www.jin10.com/', tags: ['中金所', '快讯'] },
+        ],
+      },
+    },
+  },
   { label: '资讯', component: plugin.__components.NewsList, props: { limit: 20, preview: { ok: true, rows: detail.news } } },
   {
     label: '折线图',
@@ -209,6 +319,12 @@ const CONFIGS = [
 let pass = 0
 let fail = 0
 // 季节图专项断言：降级路径曾因读取 undefined 的 p10/p90 让整块图变成 NaN
+// 详情页专项断言：页签必须仍然存在（曾经在详情页被整条隐藏）
+const tabChecks = (label, html) => {
+  if (label !== '详情页（带导航）') return null
+  const missing = ['总览', '套利', '资讯'].filter((text) => !html.includes(text))
+  return missing.length === 0 ? null : `缺少页签：${missing.join('/')}`
+}
 const seasonChecks = (label, html) => {
   if (!label.startsWith('季节图')) return null
   if (html.includes('NaN')) return '含 NaN'
@@ -225,12 +341,57 @@ const seasonChecks = (label, html) => {
   }
   return null
 }
+// 本轮新增的两处 UI 断言：跨期排序控件、详情页合约数据日期列
+const uiChecks = (label, html) => {
+  if (label === '跨期价差') {
+    const missing = ['排序', '近月', '价差率', '年化'].filter((text) => !html.includes(text))
+    return missing.length === 0 ? null : `缺少排序控件：${missing.join('/')}`
+  }
+  if (label === '品种详情') {
+    return html.includes('数据日期') ? null : '合约表缺少「数据日期」列'
+  }
+  // 中金所口径：贴水而不是基差；没有仓单列/仓单卡片
+  if (label === '中金所总览') {
+    if (!html.includes('贴水')) return '缺少「贴水」口径文案'
+    if (html.includes('<th>仓单</th>')) return '中金所总览不应出现仓单列'
+  }
+  if (label === '中金所详情') {
+    // 股指详情：贴水分位 + 年化贴水；且不应再出现注册仓单卡片
+    if (!html.includes('贴水分位')) return '缺少「贴水分位」'
+    if (!html.includes('年化贴水')) return '缺少「年化贴水」'
+    if (html.includes('注册仓单')) return '中金所详情不应出现注册仓单卡片'
+  }
+  if (label === '中金所资讯') {
+    // 标签应显示「公告/快讯」，而不是把「中金所」当成标签
+    if (!html.includes('公告')) return '缺少公告标签'
+    if (!html.includes('关于增加30年期国债期货合约可交割国债的通知')) return '缺少公告标题'
+  }
+  if (label === '中金所骨架') {
+    if (!html.includes('中金所')) return '缺少板块切换器'
+  }
+  if (label === '黑色骨架') {
+    if (!html.includes('黑色')) return '缺少板块切换器'
+  }
+  if (label === '中金所骨架' || label === '黑色骨架') {
+    // 供需页签已删除：任何板块骨架都不应再出现它
+    if (html.includes('>供需<')) return '供需页签应已删除'
+  }
+  return null
+}
 const expectByLabel = {
   总览: '板块总览',
   品种详情: '跨期结构',
+  '详情页（带导航）': '读取品种数据',
   套利: '跨品种价差',
-  库存: '注册仓单',
+  跨期价差: '合约对',
   资讯: '进口大豆',
+  中金所总览: '中金所总览',
+  中金所详情: '贴水分位',
+  中金所骨架: '中金所',
+  '资讯页签（黑色）': '黑色关键词',
+  '资讯页签（其他）': '其他关键词',
+  黑色骨架: '黑色',
+  中金所资讯: '公告',
   折线图: '<svg',
   K线图: '<rect',
   术语答疑: '术语说明',
@@ -242,7 +403,7 @@ for (const cfg of CONFIGS) {
   try {
     const html = ReactDOMServer.renderToStaticMarkup(React.createElement(cfg.component, cfg.props))
     const need = expectByLabel[cfg.label]
-    const extraError = seasonChecks(cfg.label, html)
+    const extraError = seasonChecks(cfg.label, html) ?? tabChecks(cfg.label, html) ?? uiChecks(cfg.label, html)
     const ok = html.length > 120 && html.includes(need) && extraError === null
     if (ok) {
       pass += 1

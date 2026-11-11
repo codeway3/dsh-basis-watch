@@ -25,6 +25,7 @@ import {
   localDate,
   updateAfterClose,
   updateBasis,
+  updateExtraSpot,
   updateIntraday,
   updateNewsOnly,
 } from './lib/collect.js'
@@ -39,8 +40,13 @@ export const inject = ['webServer', 'tools']
 const INTRADAY_MS = 15 * 60 * 1000
 /** 新闻刷新间隔：20 分钟。 */
 const NEWS_MS = 20 * 60 * 1000
-/** 收盘后日线抓取时刻（分钟数，从 00:00 起算）：15:10。 */
-const DAILY_AT = 15 * 60 + 10
+/**
+ * 收盘后日线抓取时刻（分钟数，从 00:00 起算）：15:20。
+ *
+ * 为什么不是 15:10：中金所国债期货 15:15 才收盘，15:10 抓到的确实是"还没收盘的当天 bar"；
+ * 商品/股指 15:00 收盘，15:20 仍在当日，不影响它们。
+ */
+const DAILY_AT = 15 * 60 + 20
 /** 基差抓取时刻：16:40（生意社 16:30 后才出当日表）。 */
 const BASIS_AT = 16 * 60 + 40
 /** 参与崩溃恢复的数据集。 */
@@ -85,18 +91,23 @@ export function apply(ctx) {
         warnedUncovered = cal.date.slice(0, 4)
         ctx.logger?.warn?.(`basis-watch: 交易日历未覆盖 ${warnedUncovered} 年，节假日按周末规则近似，请补充 lib/calendar.js`)
       }
-      // 必须按北京时间判断 15:10 / 16:40，宿主时区不是 Asia/Shanghai 时也不能偏
+      // 必须按北京时间判断 15:20 / 16:40，宿主时区不是 Asia/Shanghai 时也不能偏
       const minutes = shanghaiMinutes(now)
 
-      // 首次启动且从未回填过 → 后台回填一次（只做 1 年，避免一上来跑太久）
+      // 首次启动且从未回填过 → 后台回填一次（只做 1 年，避免一上来跑太久）。
+      // 失败（error）后必须还能再试：早期只看 dataset===null，第一次失败会把状态写成 error，
+      // 之后永远判定"已经回填过"，插件就一直空着等人工干预。
       const meta = store.meta()
-      const neverBootstrapped = store.dataset('bootstrap') === null && meta.lastUpdate?.basis === undefined
-      if (neverBootstrapped) {
+      const bootState = store.dataset('bootstrap')
+      const neverBootstrapped = meta.lastUpdate?.basis === undefined && (bootState === null || bootState.status === 'error')
+      if (neverBootstrapped && shouldSkip(store, 'bootstrap') === null) {
         // 不 await：首次回填要跑几分钟，await 会把整个调度循环卡住，
         // 回填期间连盘中行情都不会刷新。放到后台，靠 datasets.bootstrap 看进度。
         void runJob(store, 'bootstrap', () => bootstrap(store, { basisYears: 1 }), {
           ttlMs: 2 * 3600 * 1000,
           lockName: 'backfill',
+          // 回填失败一次要重跑几百次请求，重试间隔不能太短
+          retryMs: 30 * 60 * 1000,
         }).then((out) => {
           ctx.logger?.info?.(`basis-watch: 首次回填 ${out.ok ? '完成' : (out.reason ?? out.error ?? '失败')}`)
         })
@@ -119,15 +130,37 @@ export function apply(ctx) {
         await runJob(store, 'news', () => updateNewsOnly(store), { watermarkOf: () => new Date().toISOString() })
       }
 
-      // 3) 收盘后日线 + 仓单（15:10 之后一次）
+      // 3) 收盘后日线 + 仓单 + 分级合约 + 指数（15:20 之后一次；国债 15:15 才收盘）
+      //    基差**不在这里抓**：生意社 16:30 后才出当天表，收盘任务抓必然为空，
+      //    早期会因此把收盘任务判为 partial，然后从 15:10 到 16:40 每分钟重跑一次全量抓取。
       if (cal.trading && minutes >= DAILY_AT && !ranToday('update-close') && shouldSkip(store, 'update-close') === null) {
-        const out = await runJob(store, 'update-close', () => updateAfterClose(store, now), { watermarkOf: () => today })
+        const out = await runJob(store, 'update-close', () => updateAfterClose(store, now, {}, { withBasis: false }), {
+          watermarkOf: () => today,
+        })
         if (out.ok) ctx.logger?.info?.(`basis-watch: 收盘更新 ${JSON.stringify(out.result?.daily ?? {}).slice(0, 200)}`)
       }
 
       // 4) 基差（16:40 之后一次，非交易日不跑）
+      //    葵油等非生意社现货源跟着基差一起补：15:20 的收盘任务已经不再抓基差，
+      //    如果还放在 updateAfterClose 里，withBasis:false 之后就永远不会更新。
       if (cal.trading && minutes >= BASIS_AT && !ranToday('basis') && shouldSkip(store, 'basis') === null) {
-        const out = await runJob(store, 'basis', () => updateBasis(store, today), { watermarkOf: () => today })
+        const out = await runJob(
+          store,
+          'basis',
+          async () => {
+            const res = await updateBasis(store, today)
+            let extraSpot = null
+            try {
+              extraSpot = await updateExtraSpot(store, today, now)
+              if (extraSpot === null) store.recordGap('extra-spot', today, '葵油现货/期货数据不全')
+              else store.clearGap('extra-spot', today)
+            } catch (error) {
+              store.recordGap('extra-spot', today, error instanceof Error ? error.message : String(error))
+            }
+            return { ...res, extraSpot }
+          },
+          { watermarkOf: () => today },
+        )
         if (out.ok) ctx.logger?.info?.(`basis-watch: 基差 ${JSON.stringify(out.result ?? {})}`)
       }
     } catch (error) {

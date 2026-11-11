@@ -1,7 +1,7 @@
 {
   "name": "dsh-basis-watch",
-  "version": "0.1.0",
-  "description": "Basis Watch: a local-first dashboard for commodity futures basis, cross-variety spreads and warehouse receipts (China oilseed complex), packaged as a DSH plugin.",
+  "version": "0.2.0",
+  "description": "Basis Watch: a local-first dashboard for basis/discount, cross-variety spreads, term structure and warehouse receipts across China's oilseed complex and CFFEX index/treasury futures, packaged as a DSH plugin.",
   "type": "module",
   "main": "index.js",
   "icon": "./icon.svg",
@@ -36,6 +36,7 @@
     "cordis.patch.yml",
     "README.md",
     "README.zh-CN.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
@@ -55,17 +56,25 @@
     "url": "https://github.com/codeway3/dsh-basis-watch/issues"
   },
   "scripts": {
-    "check": "node --check index.js && node --check client.js && node --check lib/catalog.js && node --check lib/http.js && node --check lib/sources.js && node --check lib/store.js && node --check lib/calc.js && node --check lib/collect.js && node --check lib/routes.js && node --check lib/tools.js && node --check scripts/collect.mjs && node --check scripts/selftest-data.mjs && node --check scripts/selftest-host.mjs && node --check scripts/selftest-client.mjs && node --check scripts/table-audit.mjs && node --check scripts/render-smoke.cjs && node --check scripts/selftest-correctness.mjs && node --check scripts/selftest-shortcut.mjs && node --check scripts/check-manifest.mjs",
-    "selftest": "node scripts/selftest-data.mjs && node scripts/selftest-host.mjs && node scripts/selftest-correctness.mjs && node scripts/selftest-client.mjs && node scripts/selftest-shortcut.mjs && node scripts/check-manifest.mjs",
+    "check": "node --check index.js && node --check scripts/build-client.mjs && node --check lib/catalog.js && node --check lib/http.js && node --check lib/sources.js && node --check lib/store.js && node --check lib/calc.js && node --check lib/collect.js && node --check lib/routes.js && node --check lib/term.js && node --check lib/tools.js && node --check lib/jobs.js && node --check lib/lock.js && node --check lib/calendar.js && node --check lib/continuous.js && node --check scripts/collect.mjs && node --check scripts/selftest-data.mjs && node --check scripts/selftest-host.mjs && node --check scripts/selftest-client.mjs && node --check scripts/table-audit.mjs && node --check scripts/render-smoke.cjs && node --check scripts/selftest-correctness.mjs && node --check scripts/selftest-frontend-state.mjs && node --check scripts/selftest-shortcut.mjs && node --check scripts/check-manifest.mjs && node scripts/build-client.mjs --check",
+    "selftest": "node scripts/selftest-data.mjs && node scripts/selftest-host.mjs && node scripts/selftest-correctness.mjs && node scripts/selftest-frontend-state.mjs && node scripts/selftest-client.mjs && node scripts/selftest-shortcut.mjs && node scripts/check-manifest.mjs",
+    "selftest:all": "npm run check && node scripts/selftest-data.mjs && DSH_BASIS_WATCH_SCHED=0 node scripts/selftest-host.mjs && node scripts/selftest-correctness.mjs && node scripts/selftest-frontend-state.mjs && FR_REACT_DIR=${FR_REACT_DIR:-node_modules} node scripts/selftest-client.mjs && node scripts/selftest-shortcut.mjs && node scripts/check-manifest.mjs && FR_REACT_DIR=${FR_REACT_DIR:-node_modules} node scripts/render-smoke.cjs && FR_REACT_DIR=${FR_REACT_DIR:-node_modules} node scripts/table-audit.mjs",
     "selftest:data": "node scripts/selftest-data.mjs",
     "selftest:host": "DSH_BASIS_WATCH_SCHED=0 node scripts/selftest-host.mjs",
     "selftest:render": "node scripts/render-smoke.cjs",
     "audit:tables": "node scripts/table-audit.mjs",
     "audit:manifest": "node scripts/check-manifest.mjs",
     "collect": "node scripts/collect.mjs",
+    "build:client": "node scripts/build-client.mjs",
+    "check:client": "node scripts/build-client.mjs --check",
     "selftest:client": "node scripts/selftest-client.mjs",
     "selftest:shortcut": "node scripts/selftest-shortcut.mjs",
-    "selftest:correctness": "node scripts/selftest-correctness.mjs"
+    "selftest:correctness": "node scripts/selftest-correctness.mjs",
+    "selftest:frontend": "node scripts/selftest-frontend-state.mjs"
+  },
+  "devDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "keywords": [
     "dsh",
