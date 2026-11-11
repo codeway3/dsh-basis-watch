@@ -46,6 +46,7 @@ All notable changes to this plugin are documented here. The format follows
 - 详情页 stale 数据被整页错误吞掉；资讯页失败/刷新失败/暂无三态不区分。
 - 粮油网全栏目失败仍报 `ok`（现抛错并计入失败项）。
 - 结果缓存对日线/仓单单独更新不失效、跨 store 串数据（key 改为按前缀聚合 + `store.root`）。
+- 口径分层自测改为临时 store 自造行情（此前误用默认数据目录，CI 空环境下统计口径为 raw、10 年分位缺样本而失败）。
 - 术语表“复权连续”与“价格分位未复权”的表述冲突。
 
 ### Notes / 已知限制

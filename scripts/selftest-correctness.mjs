@@ -259,8 +259,26 @@ group('只读路径无写副作用')
 /* ───────────── 11. 口径分层 ───────────── */
 group('分位与收益率口径分离')
 {
-  const store = createStore()
+  // 必须在临时 store 里造数据：测试机/CI 的默认数据目录可能为空，不能依赖本地已有行情
+  const root = tmpRoot()
+  const store = createStore({ root })
   store.ensure()
+  const bars = []
+  const adjusted = []
+  const start = Date.UTC(2016, 0, 4)
+  for (let i = 0; i < 2800; i += 1) {
+    const day = new Date(start + i * 86400000).toISOString().slice(0, 10)
+    const close = Number((1000 + i * 0.3 + 50 * Math.sin(i / 30)).toFixed(2))
+    bars.push({ d: day, o: close, h: close, l: close, c: close, v: 1000, p: 1000 })
+    adjusted.push({ d: day, o: close, h: close, l: close, c: close, adj: close, v: 1000 })
+  }
+  store.writeDaily('M0', bars)
+  store.writeContinuous('M0', {
+    bars: adjusted,
+    coverage: { from: bars[0].d, to: bars[bars.length - 1].d, matchedDays: bars.length, totalDays: bars.length },
+    rolls: [],
+  })
+  store.writeQuotes([{ code: 'M0', name: '豆粕', last: bars[bars.length - 1].c, prevSettle: bars[bars.length - 2].c, hold: 1, at: '2026-11-11T15:00:00+08:00' }], [], [], null)
   const d = buildDetail(store, 'M0')
   check('统计用复权口径', d.price.caliber.stats === 'adjusted', JSON.stringify(d.price.caliber))
   check('分位用真实报价', d.price.caliber.percentile === 'raw')
@@ -275,6 +293,7 @@ group('分位与收益率口径分离')
   const sourceAt = (snap?.rows ?? []).map((r) => r?.at).filter(Boolean).sort().pop() ?? null
   check('quotes 的 asOf 用源站时间', sourceAt === null || q.quotes?.asOf === sourceAt, `${q.quotes?.asOf} vs ${sourceAt}`)
   check('quotes 同时保留落盘时刻 fetchedAt', snap?.at === undefined || q.quotes?.fetchedAt === snap.at, `${q.quotes?.fetchedAt} vs ${snap?.at}`)
+  fs.rmSync(root, { recursive: true, force: true })
 }
 
 /* ───────────── 12. percentileOf 夹取 ───────────── */
