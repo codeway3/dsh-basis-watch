@@ -230,7 +230,11 @@
                     h(
                       'span',
                       { className: 'bw-num', title: s.available ? `3 年区间 ${fmt(s.min3y, s.type === 'ratio' ? 3 : 0)} ~ ${fmt(s.max3y, s.type === 'ratio' ? 3 : 0)}，中位 ${fmt(s.median3y, s.type === 'ratio' ? 3 : 0)}` : undefined },
-                      s.available ? `${fmt(s.current, s.type === 'ratio' ? 3 : 0)}（${Math.round(s.percentile3y)}%分位，z=${fmt(s.z3y, 2)}）` : h('span', { className: 'bw-muted' }, s.reason ?? '待上市'),
+                      s.available
+                        ? s.partial
+                          ? `${fmt(s.current, s.type === 'ratio' ? 3 : 0)}（${s.reason ?? '样本不足'}）`
+                          : `${fmt(s.current, s.type === 'ratio' ? 3 : 0)}（${Math.round(s.percentile3y)}%分位，z=${fmt(s.z3y, 2)}）`
+                        : h('span', { className: 'bw-muted' }, s.reason ?? '暂无数据'),
                     ),
                   ),
                 ),

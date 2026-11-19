@@ -227,7 +227,7 @@
                           h('span', null, fmt(s.current, s.type === 'ratio' ? 3 : 0)),
                           h('span', { className: 'bw-stack-sub' }, s.unit || (s.type === 'ratio' ? '比值' : '元/吨')),
                         )
-                      : h('span', { className: 'bw-muted' }, '待上市'),
+                      : h('span', { className: 'bw-muted' }, s.reason ?? '暂无数据'),
                   ),
                   h('td', null, s.available ? h(PercentileBar, { value: s.percentile3y }) : h('span', { className: 'bw-muted' }, '—')),
                   h(

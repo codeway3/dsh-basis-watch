@@ -250,7 +250,7 @@
                       h(
                         'span',
                         { className: 'bw-num', style: { display: 'inline-flex', alignItems: 'center', gap: 8 } },
-                        s.available ? (s.type === 'ratio' ? Number(s.current).toFixed(3) : fmt(s.current, 0)) : h('span', { className: 'bw-muted' }, '待上市'),
+                        s.available ? (s.type === 'ratio' ? Number(s.current).toFixed(3) : fmt(s.current, 0)) : h('span', { className: 'bw-muted' }, s.reason ?? '暂无数据'),
                         s.available ? h(PercentileBar, { value: s.percentile3y }) : null,
                       ),
                     ),

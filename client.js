@@ -3,7 +3,7 @@
  *
  * 注册为 DSH 官方面板：
  * - `main`            整页（总览 / 套利 / 库存 / 资讯，可下钻品种详情）
- * - `sidebar.panellist` 侧边栏入口（默认隐藏，设置里开启）
+ * - `sidebar.panellist` 侧边栏入口（常显；配置在页面的「配置」按钮里）
  *
  * 所有数据来自 /basis-watch/api，全部读本地文件；页面不做任何外部请求。
  * 图表全部手绘 SVG，不引入第三方图表库。
@@ -31,7 +31,7 @@ window.__ModuleLoader__.load({
 
     /* ───────────── 配置 ───────────── */
 
-    const DEFAULT_CFG = { showEntry: false }
+    const DEFAULT_CFG = {}
 
     /** 资讯来源说明（按板块），总览与资讯页共用。 */
     const NEWS_SOURCE_LABEL = {
@@ -1191,7 +1191,7 @@ window.__ModuleLoader__.load({
                       h(
                         'span',
                         { className: 'bw-num', style: { display: 'inline-flex', alignItems: 'center', gap: 8 } },
-                        s.available ? (s.type === 'ratio' ? Number(s.current).toFixed(3) : fmt(s.current, 0)) : h('span', { className: 'bw-muted' }, '待上市'),
+                        s.available ? (s.type === 'ratio' ? Number(s.current).toFixed(3) : fmt(s.current, 0)) : h('span', { className: 'bw-muted' }, s.reason ?? '暂无数据'),
                         s.available ? h(PercentileBar, { value: s.percentile3y }) : null,
                       ),
                     ),
@@ -1471,7 +1471,11 @@ window.__ModuleLoader__.load({
                     h(
                       'span',
                       { className: 'bw-num', title: s.available ? `3 年区间 ${fmt(s.min3y, s.type === 'ratio' ? 3 : 0)} ~ ${fmt(s.max3y, s.type === 'ratio' ? 3 : 0)}，中位 ${fmt(s.median3y, s.type === 'ratio' ? 3 : 0)}` : undefined },
-                      s.available ? `${fmt(s.current, s.type === 'ratio' ? 3 : 0)}（${Math.round(s.percentile3y)}%分位，z=${fmt(s.z3y, 2)}）` : h('span', { className: 'bw-muted' }, s.reason ?? '待上市'),
+                      s.available
+                        ? s.partial
+                          ? `${fmt(s.current, s.type === 'ratio' ? 3 : 0)}（${s.reason ?? '样本不足'}）`
+                          : `${fmt(s.current, s.type === 'ratio' ? 3 : 0)}（${Math.round(s.percentile3y)}%分位，z=${fmt(s.z3y, 2)}）`
+                        : h('span', { className: 'bw-muted' }, s.reason ?? '暂无数据'),
                     ),
                   ),
                 ),
@@ -1758,7 +1762,7 @@ window.__ModuleLoader__.load({
                           h('span', null, fmt(s.current, s.type === 'ratio' ? 3 : 0)),
                           h('span', { className: 'bw-stack-sub' }, s.unit || (s.type === 'ratio' ? '比值' : '元/吨')),
                         )
-                      : h('span', { className: 'bw-muted' }, '待上市'),
+                      : h('span', { className: 'bw-muted' }, s.reason ?? '暂无数据'),
                   ),
                   h('td', null, s.available ? h(PercentileBar, { value: s.percentile3y }) : h('span', { className: 'bw-muted' }, '—')),
                   h(
@@ -1796,28 +1800,11 @@ window.__ModuleLoader__.load({
     /* ───────────── 设置 ───────────── */
 
     function SettingsPanel({ onClose, onRefresh }) {
-      const [cfg, setCfg] = useState(readCfg())
-      useEffect(() => {
-        const fn = (next) => setCfg(next)
-        cfgSubs.add(fn)
-        return () => cfgSubs.delete(fn)
-      }, [])
       const status = useApi('op=status')
       const coverage = status.data?.coverage
       return h(
         'div',
         { className: 'bw-set' },
-        h(
-          'div',
-          { className: 'bw-set-row' },
-          h('input', {
-            type: 'checkbox',
-            checked: cfg.showEntry === true,
-            onChange: (e) => writeCfg({ showEntry: e.target.checked }),
-          }),
-          h('span', null, '在侧边栏显示「期现瞭望」入口'),
-        ),
-        h('div', { className: 'bw-set-hint' }, '默认隐藏。开启后侧边栏出现入口，点击进入整页。'),
         h('div', { className: 'bw-set-row' }, h('button', { className: 'bw-btn', onClick: onRefresh }, '立即抓取（行情+新闻）')),
         h('div', { className: 'bw-set-hint' }, '抓取会访问外部数据源；页面展示始终读本地文件。'),
         h(
@@ -1969,7 +1956,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'bw-spacer' }),
           h('span', { className: 'bw-fresh', title: '各数据集最近一次成功抓取的时间；⚠ 表示已超过新鲜度阈值' }, freshLabel(statusApi.data?.asOf)),
           h('button', { className: 'bw-btn', onClick: () => setGlossaryOpen(true) }, '术语说明'),
-          h('button', { className: 'bw-btn', onClick: () => setSettingsOpen((v) => !v) }, settingsOpen ? '收起设置' : '设置'),
+          h('button', { className: 'bw-btn', onClick: () => setSettingsOpen((v) => !v) }, settingsOpen ? '收起配置' : '配置'),
         ),
         settingsOpen ? null : h('div', { className: 'bw-tabsrow' }, h(TabBar, { tab, onSelect: pickTab, board })),
         h(
@@ -2122,100 +2109,6 @@ window.__ModuleLoader__.load({
         ),
       )
     }
-    /* ───────────── 设置项（设置页里的一节） ───────────── */
-
-    /**
-     * 设置页的「期现瞭望」一节。
-     *
-     * 为什么必须有它：面板入口默认隐藏，而"打开入口"的开关如果只放在面板内部，
-     * 就形成死循环（入口隐藏 → 进不去面板 → 打不开开关）。设置页始终可达，
-     * 所以开关必须在这里，同时提供一个「打开整页」按钮直接跳过侧边栏。
-     */
-    function SettingsSection() {
-      const [cfg, setCfg] = useState(readCfg())
-      const [busy, setBusy] = useState(false)
-      const [msg, setMsg] = useState('')
-      const status = useApi('op=status')
-      useEffect(() => {
-        const fn = (next) => setCfg(next)
-        cfgSubs.add(fn)
-        return () => cfgSubs.delete(fn)
-      }, [])
-
-      const openPanel = () => {
-        const layout = pluginCtx?.get?.('layout')
-        if (layout?.selectPanel !== undefined) {
-          try {
-            layout.selectPanel(PANEL_ID)
-            setMsg('已打开面板；如果没反应，请开启上面的侧边栏入口')
-            return
-          } catch (error) {
-            setMsg('当前壳子不允许直接打开面板，已改为显示侧边栏入口')
-          }
-        } else {
-          setMsg('当前壳子不支持直接打开面板，已改为显示侧边栏入口')
-        }
-        // 兜底：至少让用户能从侧边栏进去
-        writeCfg({ showEntry: true })
-      }
-
-      const runUpdate = () => {
-        setBusy(true)
-        setMsg('')
-        fetch(`${API}?op=update&mode=intraday`)
-          .then((r) => r.json())
-          .then((res) => {
-            setBusy(false)
-            setMsg(res.ok ? `已更新：行情 ${res.result?.quotes?.rows ?? 0} 条，新闻新增 ${res.result?.news?.kept ?? 0} 条` : `失败：${res.error ?? '未知错误'}`)
-            status.reload()
-          })
-          .catch((error) => {
-            setBusy(false)
-            setMsg(`失败：${String(error)}`)
-          })
-      }
-
-      const coverage = status.data?.coverage
-      return h(
-        'div',
-        { className: 'bw-set' },
-        h(
-          'div',
-          { className: 'bw-set-row' },
-          h('input', {
-            type: 'checkbox',
-            checked: cfg.showEntry === true,
-            onChange: (e) => writeCfg({ showEntry: e.target.checked }),
-          }),
-          h('span', null, '在侧边栏显示「期现瞭望」入口'),
-        ),
-        h('div', { className: 'bw-set-hint' }, '默认隐藏。开启后侧边栏出现入口；也可以直接点下面的按钮进入整页。'),
-        h(
-          'div',
-          { className: 'bw-set-row' },
-          h('button', { className: 'bw-btn', onClick: openPanel }, '打开整页'),
-          h('button', { className: 'bw-btn', onClick: runUpdate, disabled: busy }, busy ? '抓取中…' : '立即抓取行情+新闻'),
-        ),
-        msg !== '' ? h('div', { className: 'bw-set-hint' }, msg) : null,
-        h(
-          'div',
-          { style: { marginTop: 10 } },
-          h('div', { className: 'bw-card-title', style: { marginBottom: 6 } }, '数据完整度'),
-          coverage === undefined
-            ? h('div', { className: 'bw-muted' }, '读取中…')
-            : h(
-                'div',
-                null,
-                h(Kv, { k: '数据目录', v: coverage.root ?? '—' }),
-                h(Kv, { k: '日线品种', v: `${Object.keys(coverage.daily ?? {}).length} 个` }),
-                h(Kv, { k: '基差行数', v: `${coverage.basis?.rows ?? 0}（${coverage.basis?.from ?? '—'} 起）` }),
-                h(Kv, { k: '仓单品种', v: `${Object.keys(coverage.stock ?? {}).length} 个` }),
-                h(Kv, { k: '缺口', v: `${coverage.gapCount ?? 0} 条` }),
-              ),
-        ),
-      )
-    }
-
     /* ───────────── 侧边栏图标 ───────────── */
 
     function PanelIcon() {
@@ -2235,137 +2128,23 @@ window.__ModuleLoader__.load({
 
     return {
       name: 'dsh-basis-watch/client',
-      /**
-       * 仅供离线渲染冒烟测试使用（服务端渲染不跑 useEffect，
-       * 组件接受 preview 数据以便直接验证渲染结果）。
-       */
       /** 仅供离线渲染测试使用：组件与样式导出（服务端渲染不跑 useEffect）。 */
-      __components: { Page, TabBar, Overview, Detail, Spreads, TermPanel, NewsList, SettingsPanel, SettingsSection, LineChart, CandleChart, SeasonChart, Spark, PercentileBar, GlossaryModal },
+      __components: { Page, TabBar, Overview, Detail, Spreads, TermPanel, NewsList, SettingsPanel, LineChart, CandleChart, SeasonChart, Spark, PercentileBar, GlossaryModal },
       __css: CSS,
       inject: ['slots'],
       apply(ctx) {
         injectStyles()
-        pluginCtx = ctx
         const slots = ctx.slots ?? ctx.get?.('slots')
         if (slots === undefined) return
         const disposers = []
         try {
+          // 主面板 + 左侧栏入口：入口常显，配置都在面板自己的「配置」按钮里。
           disposers.push(slots.inject('main', () => slots.register({ name: 'main', key: PANEL_ID }, Page)))
-          // 设置页始终可达：入口开关必须放在这里，否则"入口默认隐藏"会变成死循环
           disposers.push(
-            slots.inject('settings.section', () =>
-              slots.register({ name: 'settings.section', id: 'basis-watch', order: 54, label: '期现瞭望' }, SettingsSection),
+            slots.inject('sidebar.panellist', () =>
+              slots.register({ name: 'sidebar.panellist', id: PANEL_ID, order: 21, label: () => '期现瞭望' }, PanelIcon),
             ),
           )
-          // 侧边栏入口：默认隐藏，开关变化时动态注册/注销
-          let entryDisposer = null
-          const syncEntry = (cfg) => {
-            const want = cfg ? cfg.showEntry === true : readCfg().showEntry === true
-            if (want && entryDisposer === null) {
-              entryDisposer = slots.inject('sidebar.panellist', () =>
-                slots.register({ name: 'sidebar.panellist', id: PANEL_ID, order: 21, label: () => '期现瞭望' }, PanelIcon),
-              )
-            } else if (!want && entryDisposer !== null) {
-              entryDisposer()
-              entryDisposer = null
-            }
-          }
-          syncEntry(null)
-          const sub = (cfg) => syncEntry(cfg)
-          cfgSubs.add(sub)
-          disposers.push(() => {
-            cfgSubs.delete(sub)
-            if (entryDisposer !== null) entryDisposer()
-          })
-          // Shift+Cmd+D（Windows/Linux 为 Shift+Ctrl+D）：切换侧边栏入口；
-          // 如果当前正在本插件内，顺手回到会话视图（面板替换了会话区，selectPanel(null) 即回到进入前的会话）
-          // 宿主 register() 会对六个 profile 全部校验，任一非法/冲突就整体抛错并丢弃该命令。
-          // 因此先试全平台默认键，被拒时退化为"只给桌面三平台"，保证 macOS 一定能用上。
-          const FULL_DEFAULTS = {
-            // web:linux 只接受 Cmd/Ctrl+Slash、+Shift+Comma、+Shift+Period 三种组合，
-            // 浏览器下不预置（留空 = 未绑定，用户可在「设置 → 快捷键」里自行录制）；
-            // 桌面版 Linux 不受此限，照常给 Ctrl+Shift+D。
-            'desktop:macos': { code: 'KeyD', modifiers: ['primary', 'shift'] },
-            'desktop:windows': { code: 'KeyD', modifiers: ['primary', 'shift'] },
-            'desktop:linux': { code: 'KeyD', modifiers: ['primary', 'shift'] },
-            'web:macos': { code: 'KeyD', modifiers: ['primary', 'shift'] },
-            'web:windows': { code: 'KeyD', modifiers: ['primary', 'shift'] },
-          }
-          const DESKTOP_ONLY_DEFAULTS = {
-            'desktop:macos': { code: 'KeyD', modifiers: ['primary', 'shift'] },
-            'desktop:windows': { code: 'KeyD', modifiers: ['primary', 'shift'] },
-            'desktop:linux': { code: 'KeyD', modifiers: ['primary', 'shift'] },
-          }
-          const registerShortcut = () => {
-            const shortcuts = ctx.get?.('shortcuts')
-            if (shortcuts === undefined) return false
-            for (const [variant, defaults] of [['全平台', FULL_DEFAULTS], ['仅桌面', DESKTOP_ONLY_DEFAULTS]]) {
-              try {
-                disposers.push(
-                  shortcuts.register({
-                    id: 'basis-watch.entry.toggle',
-                    label: () => '显示/隐藏「期现瞭望」入口',
-                    aliases: ['basis watch', 'basis-watch', '期现瞭望', 'toggle entry'],
-                    defaults,
-                    regions: ['page', 'editable'],
-                    // modals 是宿主 dispatch 会读的字段（command.modals.includes），缺省会抛错
-                    modals: [],
-                    resolve: ({ modal }) => {
-                      if (modal !== null || panelModalOpen) return { status: 'blocked', reason: 'modal' }
-                      return {
-                        status: 'handled',
-                        run: () => {
-                          const layout = pluginCtx?.get?.('layout')
-                          // 是否正停在本插件：优先读 shell 的当前面板，读不到时退回挂载标记
-                          let inPanel = panelActive
-                          try {
-                            const active = layout?.panelInfo?.getSnapshot?.()?.activePanelId
-                            if (typeof active === 'string' || active === null) inPanel = active === PANEL_ID
-                          } catch {
-                            /* 读不到就用挂载标记 */
-                          }
-                          writeCfg({ showEntry: readCfg().showEntry !== true })
-                          // 在插件内按下时顺手回到会话（面板替换了会话区，selectPanel(null) 即回到进入前的会话）
-                          if (inPanel && typeof layout?.selectPanel === 'function') {
-                            try {
-                              layout.selectPanel(null)
-                            } catch {
-                              /* 壳子不允许时忽略 */
-                            }
-                          }
-                        },
-                      }
-                    },
-                  }),
-                )
-                console.info?.(`[basis-watch] 快捷键已注册（${variant}）：Shift+Cmd+D / Shift+Ctrl+D`)
-                return true
-              } catch (error) {
-                // 键位冲突/被壳子拒绝时只记日志，不能让整个插件挂掉
-                console.warn?.(
-                  `[basis-watch] 快捷键注册失败（${variant}）：`,
-                  error instanceof Error ? error.message : error,
-                )
-              }
-            }
-            return true
-          }
-          if (!registerShortcut()) {
-            // shortcuts 服务可能比本插件晚就绪：短轮询最多 3 秒，注册上就停
-            let tries = 0
-            const timer = setInterval(() => {
-              tries += 1
-              if (registerShortcut()) {
-                clearInterval(timer)
-                return
-              }
-              if (tries >= 30) {
-                clearInterval(timer)
-                console.warn?.('[basis-watch] shortcuts 服务不可用，快捷键未注册')
-              }
-            }, 100)
-            disposers.push(() => clearInterval(timer))
-          }
           ctx.effect?.(() => () => {
             for (const d of disposers.splice(0).reverse()) {
               try {

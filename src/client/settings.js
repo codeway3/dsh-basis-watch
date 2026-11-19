@@ -1,28 +1,11 @@
     /* ───────────── 设置 ───────────── */
 
     function SettingsPanel({ onClose, onRefresh }) {
-      const [cfg, setCfg] = useState(readCfg())
-      useEffect(() => {
-        const fn = (next) => setCfg(next)
-        cfgSubs.add(fn)
-        return () => cfgSubs.delete(fn)
-      }, [])
       const status = useApi('op=status')
       const coverage = status.data?.coverage
       return h(
         'div',
         { className: 'bw-set' },
-        h(
-          'div',
-          { className: 'bw-set-row' },
-          h('input', {
-            type: 'checkbox',
-            checked: cfg.showEntry === true,
-            onChange: (e) => writeCfg({ showEntry: e.target.checked }),
-          }),
-          h('span', null, '在侧边栏显示「期现瞭望」入口'),
-        ),
-        h('div', { className: 'bw-set-hint' }, '默认隐藏。开启后侧边栏出现入口，点击进入整页。'),
         h('div', { className: 'bw-set-row' }, h('button', { className: 'bw-btn', onClick: onRefresh }, '立即抓取（行情+新闻）')),
         h('div', { className: 'bw-set-hint' }, '抓取会访问外部数据源；页面展示始终读本地文件。'),
         h(

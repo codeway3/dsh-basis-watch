@@ -127,7 +127,7 @@
           h('div', { className: 'bw-spacer' }),
           h('span', { className: 'bw-fresh', title: '各数据集最近一次成功抓取的时间；⚠ 表示已超过新鲜度阈值' }, freshLabel(statusApi.data?.asOf)),
           h('button', { className: 'bw-btn', onClick: () => setGlossaryOpen(true) }, '术语说明'),
-          h('button', { className: 'bw-btn', onClick: () => setSettingsOpen((v) => !v) }, settingsOpen ? '收起设置' : '设置'),
+          h('button', { className: 'bw-btn', onClick: () => setSettingsOpen((v) => !v) }, settingsOpen ? '收起配置' : '配置'),
         ),
         settingsOpen ? null : h('div', { className: 'bw-tabsrow' }, h(TabBar, { tab, onSelect: pickTab, board })),
         h(

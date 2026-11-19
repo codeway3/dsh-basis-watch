@@ -1,6 +1,6 @@
     /* ───────────── 配置 ───────────── */
 
-    const DEFAULT_CFG = { showEntry: false }
+    const DEFAULT_CFG = {}
 
     /** 资讯来源说明（按板块），总览与资讯页共用。 */
     const NEWS_SOURCE_LABEL = {

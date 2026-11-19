@@ -5,7 +5,7 @@ English | [简体中文](README.zh-CN.md)
 A DSH (DeepSeek Harness) plugin that turns public market feeds into a **local-first dashboard**
 for **basis / discount**, **cross-variety spreads**, **term structure** and **warehouse receipts**.
 
-Release: **0.2.0** — see [CHANGELOG](CHANGELOG.md).
+Release: **0.2.1** — see [CHANGELOG](CHANGELOG.md).
 
 Ten boards ship today (76 varieties, including a reserved lithium-hydroxide slot):
 
@@ -41,7 +41,7 @@ receipts exist and where news comes from, so it applies to every page at once.
 The network is only used to append data. Every statistic, chart and percentile is computed from
 local files, so the UI keeps working offline and history is never silently rewritten.
 
-- Settings → **期现瞭望 (Basis Watch)** to enable the sidebar entry, or press <kbd>Shift</kbd>+<kbd>Cmd</kbd>+<kbd>D</kbd>.
+- The **期现瞭望 (Basis Watch)** sidebar entry is always visible. Configuration lives in the page's top-right **配置 (Config)** panel, not in DSH Settings.
 - No composite score and no "overvalued / undervalued" label — statistics only, every page states its caliber.
 
 ## Features

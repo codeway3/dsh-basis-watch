@@ -41,7 +41,6 @@ export const ORDER = [
   'settings.js', // 面板内设置抽屉
   'page.js', // 页签、页面骨架
   'glossary.js', // 术语答疑
-  'settings-section.js', // 设置页里的「期现瞭望」一节
   'icon.js', // 侧边栏图标
   'plugin.js', // 插件对象与 apply（收尾）
 ]

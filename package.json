@@ -1,6 +1,6 @@
 {
   "name": "dsh-basis-watch",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Basis Watch: a local-first dashboard for basis/discount, cross-variety spreads, term structure and warehouse receipts across China's oilseed complex and CFFEX index/treasury futures, packaged as a DSH plugin.",
   "type": "module",
   "main": "index.js",
